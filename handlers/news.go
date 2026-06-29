@@ -1,35 +1,44 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"../models"
+	"github.com/AnnaTarantina/APIGateway/models"
 )
 
+// GetNewsList возвращает список новостей (заглушка)
 func GetNewsList(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
 	newsList := []models.NewsShortDetailed{
 		{ID: "1", Title: "Заголовок первой новости", Summary: "Краткое содержание первой новости"},
 		{ID: "2", Title: "Заголовок второй новости", Summary: "Краткое содержание второй новости"},
 	}
-
-	json.NewEncoder(w).Encode(newsList)
+	writeJSON(w, http.StatusOK, newsList)
 }
 
+// FilterNews возвращает отфильтрованные новости (заглушка)
 func FilterNews(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
 	filteredNews := []models.NewsShortDetailed{
 		{ID: "1", Title: "Отфильтрованная новость", Summary: "Отфильтрованное содержание"},
 	}
-
-	json.NewEncoder(w).Encode(filteredNews)
+	writeJSON(w, http.StatusOK, filteredNews)
 }
 
+// GetDetailedNews возвращает детальную новость (заглушка)
 func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
 	detailedNews := models.NewsFullDetailed{
 		ID:        "1",
@@ -38,6 +47,5 @@ func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
 		Author:    "Автор",
 		CreatedAt: "2024-01-01T00:00:00Z",
 	}
-
-	json.NewEncoder(w).Encode(detailedNews)
+	writeJSON(w, http.StatusOK, detailedNews)
 }

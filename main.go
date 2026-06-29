@@ -4,14 +4,17 @@ import (
 	"log"
 	"net/http"
 
-	"./handlers"
+	"github.com/AnnaTarantina/APIGateway/handlers"
 )
 
 func main() {
+	// Эндпоинты для новостей (заглушки)
 	http.HandleFunc("/news", handlers.GetNewsList)
 	http.HandleFunc("/news/filter", handlers.FilterNews)
 	http.HandleFunc("/news/detail", handlers.GetDetailedNews)
-	http.HandleFunc("/comments", handlers.AddComment)
+
+	// Эндпоинты для комментариев (прокси в CommentService)
+	http.HandleFunc("/comments", handlers.CommentsHandler)
 	http.HandleFunc("/comments/by-news-id", handlers.GetCommentsByNewsID)
 
 	log.Println("API Gateway is running on http://localhost:8080")
