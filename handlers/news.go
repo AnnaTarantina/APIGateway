@@ -13,7 +13,6 @@ import (
 
 const newsServiceURL = "http://localhost:8082"
 
-// GetNewsList проксирует запрос в агрегатор, пробрасывая s, page и request_id
 func GetNewsList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
@@ -41,10 +40,9 @@ func GetNewsList(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body)
 }
 
-// GetDetailedNews АСИНХРОННО получает новость и комментарии, объединяя их
 func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	newsID := r.URL.Query().Get("id") // Или r.PathValue("id") если используете mux 1.8+
+	newsID := r.URL.Query().Get("id")
 	if newsID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
@@ -55,7 +53,7 @@ func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	// Горутина 1: Запрос к агрегатору новостей
+	// Горутина 1: Новость из GONEWS
 	go func() {
 		defer wg.Done()
 		url := fmt.Sprintf("%s/news/detail/%s?request_id=%s", newsServiceURL, newsID, reqID)
@@ -74,7 +72,7 @@ func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
 		results <- news
 	}()
 
-	// Горутина 2: Запрос к сервису комментариев
+	// Горутина 2: Комментарии из CommentService
 	go func() {
 		defer wg.Done()
 		url := fmt.Sprintf("http://localhost:8081/comments?news_id=%s&request_id=%s", newsID, reqID)
@@ -120,7 +118,6 @@ func GetDetailedNews(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, finalNews)
 }
 
-// FilterNews можно удалить или оставить как алиас для GetNewsList с параметром s
 func FilterNews(w http.ResponseWriter, r *http.Request) {
 	GetNewsList(w, r)
 }

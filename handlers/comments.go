@@ -10,7 +10,10 @@ import (
 	"github.com/AnnaTarantina/APIGateway/middleware"
 )
 
-const commentServiceURL = "http://localhost:8081"
+const (
+	commentServiceURL    = "http://localhost:8081"
+	censorshipServiceURL = "http://localhost:8083"
+)
 
 func CommentsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -34,20 +37,35 @@ func AddComment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Парсим для проверки цензуры
+	// 1. СИНХРОННЫЙ ЗАПРОС К СЕРВИСУ ЦЕНЗУРИРОВАНИЯ
 	var commentReq struct {
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal(body, &commentReq); err == nil {
-		if !IsAllowed(commentReq.Text) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "comment contains forbidden words",
-			})
+		checkBody, _ := json.Marshal(map[string]string{"text": commentReq.Text})
+		checkURL := fmt.Sprintf("%s/check?request_id=%s", censorshipServiceURL, reqID)
+
+		checkReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, bytes.NewReader(checkBody))
+		checkReq.Header.Set("Content-Type", "application/json")
+		checkReq.Header.Set("X-Request-ID", reqID)
+
+		checkResp, err := http.DefaultClient.Do(checkReq)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "censorship service unavailable"})
+			return
+		}
+		defer checkResp.Body.Close()
+
+		if checkResp.StatusCode != http.StatusOK {
+			// Пробрасываем ошибку от сервиса цензуры (400)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(checkResp.StatusCode)
+			io.Copy(w, checkResp.Body)
 			return
 		}
 	}
 
-	// Проксируем в CommentService
+	// 2. ПРОКСИРОВАНИЕ В COMMENTS SERVICE (только если цензура пройдена)
 	targetURL := fmt.Sprintf("%s/comment?request_id=%s", commentServiceURL, reqID)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
