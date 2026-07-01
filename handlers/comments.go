@@ -3,16 +3,15 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
-	"log"
 	"net/http"
+
+	"github.com/AnnaTarantina/APIGateway/middleware"
 )
 
-// Адрес микросервиса комментариев
-const commentServiceURL = "http://localhost:3000"
+const commentServiceURL = "http://localhost:8081"
 
-// CommentsHandler — универсальный обработчик /comments
-// маршрутизирует запросы по методу (POST — создание, GET — список)
 func CommentsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
@@ -24,77 +23,76 @@ func CommentsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// AddComment проксирует POST-запрос в CommentService
 func AddComment(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	ctx := r.Context()
+	reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
 
-	// Читаем тело запроса
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
 		return
 	}
 	defer r.Body.Close()
 
-	// Формируем запрос к CommentService
-	targetURL := commentServiceURL + "/comment"
-	req, err := http.NewRequest(http.MethodPost, targetURL, bytes.NewReader(body))
-	if err != nil {
-		log.Printf("Error creating request: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+	// Парсим для проверки цензуры
+	var commentReq struct {
+		Text string `json:"text"`
 	}
+	if err := json.Unmarshal(body, &commentReq); err == nil {
+		if !IsAllowed(commentReq.Text) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "comment contains forbidden words",
+			})
+			return
+		}
+	}
+
+	// Проксируем в CommentService
+	targetURL := fmt.Sprintf("%s/comment?request_id=%s", commentServiceURL, reqID)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Request-ID", reqID)
 
-	// Выполняем запрос
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("Error calling CommentService: %v", err)
-		http.Error(w, "Comment service unavailable", http.StatusBadGateway)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "comment service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
 
-	// Копируем статус и тело ответа
-	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("Error copying response: %v", err)
-	}
-}
-
-// GetCommentsByNewsID проксирует GET-запрос в CommentService
-func GetCommentsByNewsID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
 
+func GetCommentsByNewsID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
 	newsID := r.URL.Query().Get("news_id")
+
 	if newsID == "" {
-		http.Error(w, "news_id is required", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "news_id is required"})
 		return
 	}
 
-	// Формируем запрос к CommentService
-	targetURL := commentServiceURL + "/comments?news_id=" + newsID
-	resp, err := http.Get(targetURL)
+	targetURL := fmt.Sprintf("%s/comments?news_id=%s&request_id=%s", commentServiceURL, newsID, reqID)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	req.Header.Set("X-Request-ID", reqID)
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("Error calling CommentService: %v", err)
-		http.Error(w, "Comment service unavailable", http.StatusBadGateway)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "comment service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
 
-	// Копируем ответ
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
-	if _, err := io.Copy(w, resp.Body); err != nil {
-		log.Printf("Error copying response: %v", err)
-	}
+	io.Copy(w, resp.Body)
 }
 
-// writeJSON — вспомогательная функция для записи JSON
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		log.Printf("Error encoding JSON: %v", err)
-	}
+	json.NewEncoder(w).Encode(data)
 }

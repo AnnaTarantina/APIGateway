@@ -1,17 +1,22 @@
 package models
 
-// NewsFullDetailed — полная модель новости
+import "time"
+
 type NewsFullDetailed struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	Author    string `json:"author"`
-	CreatedAt string `json:"created_at"`
+	ID       int       `json:"id"` // Было string, стало int
+	Title    string    `json:"title"`
+	Content  string    `json:"content"` // В GONEWS нет Author/CreatedAt, есть PubTime/Link/Source
+	PubTime  time.Time `json:"pub_time"`
+	Link     string    `json:"link"`
+	Source   string    `json:"source"`
+	Comments []Comment `json:"comments,omitempty"`
 }
 
-// NewsShortDetailed — краткая модель новости для списков
 type NewsShortDetailed struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Summary string `json:"summary"`
+	ID      int       `json:"id"`
+	Title   string    `json:"title"`
+	Content string    `json:"content"`
+	PubTime time.Time `json:"pub_time"`
+	Link    string    `json:"link"`
+	Source  string    `json:"source"`
 }
