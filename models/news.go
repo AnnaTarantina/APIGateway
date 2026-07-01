@@ -3,9 +3,9 @@ package models
 import "time"
 
 type NewsFullDetailed struct {
-	ID       int       `json:"id"` // Было string, стало int
+	ID       int       `json:"id"`
 	Title    string    `json:"title"`
-	Content  string    `json:"content"` // В GONEWS нет Author/CreatedAt, есть PubTime/Link/Source
+	Content  string    `json:"content"`
 	PubTime  time.Time `json:"pub_time"`
 	Link     string    `json:"link"`
 	Source   string    `json:"source"`
